@@ -1,0 +1,10 @@
+build
+*.o
+*.img
+*.elf
+*.bin
+*.hex
+
+compile_commands.json
+.cache
+

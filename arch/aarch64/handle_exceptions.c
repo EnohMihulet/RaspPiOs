@@ -41,9 +41,6 @@ void irq_handler(exception_frame* frame) {
 		uint32_t freq = timer_get_frequency();
 
 		timer_set_tval(freq);
-
-		kprintf("tick\r\n");
-
 	}
 
 	gic_end_irq(iar);

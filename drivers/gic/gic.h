@@ -54,8 +54,8 @@ typedef enum {
 // Interrupt Controller Type Register
 typedef enum {
 	GICD_TYPER_ITLINESNUMBER = (0x1Fu << 0),  // Number of supported 32-intrrupt blocks, minus 1
-	GICD_TYPER_CPUNUMBER     = (0x7u  << 5),  // Number of CPU interfaces, minus 1
-	GICD_TYPER_SECURITYEXTN  = (1u    << 10), // Whether security extensions are implemented
+	GICD_TYPER_CPUNUMBER     = (0x7u << 5),   // Number of CPU interfaces, minus 1
+	GICD_TYPER_SECURITYEXTN  = (1u << 10),    // Whether security extensions are implemented
 	GICD_TYPER_LSPI          = (0x1Fu << 11), // Lockable shared peripheral interrupt capability
 } GICD_TYPER_mask_t;
 
@@ -144,8 +144,8 @@ typedef struct {
 
 // GICC_CTLR - CPU Interface Control Register
 typedef enum {
-    GICC_CTLR_ENABLEGRP1 = (1u << 0), // ENables Group 1 interrupt delivery
-    GICC_CTLR_EOIMODENS  = (1u << 9), // Controls how interrupts are completed
+	GICC_CTLR_ENABLEGRP1 = (1u << 0), // ENables Group 1 interrupt delivery
+	GICC_CTLR_EOIMODENS  = (1u << 9), // Controls how interrupts are completed
 } GICC_CTLR_mask_t;
 
 // GICC_PMR - Priority Mask Register
@@ -155,7 +155,7 @@ typedef enum {
 #define GICC_BPR_BINARYPOINT_MASK 0x7u
 
 // GICC_IAR - Interrupt Acknowledge Register
-#define GICC_IAR_INTID_MASK   0x3FFu       // Identifies the interrupt
+#define GICC_IAR_INTID_MASK   0x3FFu	   // Identifies the interrupt
 #define GICC_IAR_CPUID_MASK   (0x7u << 10) // Identifies the source CPU for software-generated interrupts
 #define GICC_IAR_CPUID_SHIFT  10u
 
@@ -173,9 +173,9 @@ typedef enum {
 //
 
 typedef enum {
-    GIC_IRQ_TIMER_VIRT    = 27,
-    GIC_IRQ_TIMER_PHYS_NS = 30,
-    GIC_IRQ_UART10        = 153,
+	GIC_IRQ_TIMER_VIRT    = 27,
+	GIC_IRQ_TIMER_PHYS_NS = 30,
+	GIC_IRQ_UART10        = 153,
 } GIC_IRQ_t;
 
 //

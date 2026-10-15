@@ -1,6 +1,9 @@
 #include "usart.h"
 
 void uart_init(void) {
+	// Let the firmware's last characters finish before reconfiguring UART10.
+	while (UART10->FR & UART_FR_BUSY) {}
+
 	// Disable UART
 	UART10->CR = 0;
 
@@ -10,15 +13,10 @@ void uart_init(void) {
 	// Clear pending interrupts
 	UART10->ICR = 0x7FFu;
 
-	/*
-	* UART10 clock: 9,216 MHz
-	* Baud divisor: 9216000 / (16 * 115200) = 5
-	*/
-	UART10->IBRD = UART_CLOCK / (16 * 115200); // 5
+	// Keep the firmware's baud divisors: its UART10 clock is not configured
 
-	UART10->FBRD = 0;
-
-	// 8-bit words & enable FIFOs
+	// 8 data bits, 1 stop bit, no parity
+	// Enable transmit and receive FIFOs
 	UART10->LCRH = UART_LCRH_WLEN_8 | UART_LCRH_FEN;
 
 	// Enable UART, transmit, & receive

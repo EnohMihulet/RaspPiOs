@@ -4,9 +4,6 @@
 
 #define UART10_BASE 0x000000107D001000ULL
 
-#define UART_CLOCK 9216000 // 9,216 MHz
-
-
 typedef struct {
 	uint32_t DR;            // 0x000
 	uint32_t RSR_ECR;       // 0x004

@@ -28,6 +28,8 @@ make clean
 
 ## Boot
 
-The kernel is linked at `0x80000` and uses UART10 at 115200 baud.
+The kernel is linked at `0x80000` and uses UART10, retaining the baud-rate
+divisors configured by the firmware. Configure the firmware console and serial
+terminal for 115200 baud, 8 data bits, no parity, and 1 stop bit.
 Configure the Raspberry Pi firmware to load the image at that address.
 Board setup and deployment instructions are not yet documented.

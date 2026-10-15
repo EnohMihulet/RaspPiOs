@@ -4,7 +4,7 @@
 #include "gic.h"
 #include "timer.h"
 #include "printk.h"
-#include "handle_exceptions.h"
+#include "thread.h"
 
 static inline uint64_t read_current_el(void) {
 	uint64_t value;
@@ -60,6 +60,13 @@ int kernel_main(uint64_t dtb_address) {
 	dsb_sy();
 
 	enable_irqs();
+
+	boot_thread_init();
+
+	thread_a_init();
+	thread_b_init();
+
+	context_switch(&(boot_thread.context), &(thread_a.context));
 
 	for (;;) {
 		__asm__ volatile("wfe");

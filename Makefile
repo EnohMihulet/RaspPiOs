@@ -10,19 +10,19 @@ OBJDUMP =	aarch64-elf-objdump
 TARGET = kernel
 IMAGE = myos
 
-C_FLAGS =	-ffreestanding -O2 -Wall -Wextra -nostdlib -fno-stack-protector -fno-pie -Ilib/ -Idrivers/usart -Iarch/aarch64 -Ikernel/ -Idrivers/gic
+C_FLAGS =	-ffreestanding -O2 -Wall -Wextra -nostdlib -fno-stack-protector -fno-pie -Ilib/ -Idrivers/usart -Iarch/aarch64 -Ikernel -Idrivers/gic
 C_FLAGS +=	-MMD -MP
 # Early kernel code does not enable FP/SIMD registers.
 C_FLAGS +=	-mgeneral-regs-only
 LD_FLAGS =	-nostdlib
 
 C_SOURCES =	$(wildcard kernel/*.c drivers/*.c drivers/usart/*.c lib/*.c arch/aarch64/*.c drivers/gic/*.c)
-ASM_SOURCES =	$(wildcard arch/aarch64/*.s)
+ASM_SOURCES =	$(wildcard arch/aarch64/*.s kernel/*.s)
 LD_SCRIPT =	linker.ld
 BUILD_DIR =	build
 
-OBJECTS =	$(ASM_SOURCES:%.s=$(BUILD_DIR)/%.o)
-OBJECTS +=	$(C_SOURCES:%.c=$(BUILD_DIR)/%.o)
+OBJECTS =	$(ASM_SOURCES:%.s=$(BUILD_DIR)/%.s.o)
+OBJECTS +=	$(C_SOURCES:%.c=$(BUILD_DIR)/%.c.o)
 
 -include $(OBJECTS:.o=.d)
 
@@ -43,11 +43,11 @@ hex: $(IMAGE).hex
 $(IMAGE).hex: $(TARGET).elf
 	$(OBJCOPY) -O ihex $< $@
 
-$(BUILD_DIR)/%.o: %.s
+$(BUILD_DIR)/%.s.o: %.s
 	mkdir -p $(dir $@)
 	$(CC) $(CPU) -c $< -o $@
 
-$(BUILD_DIR)/%.o: %.c
+$(BUILD_DIR)/%.c.o: %.c
 	mkdir -p $(dir $@)
 	$(CC) $(CPU) $(C_FLAGS) -c $< -o $@
 

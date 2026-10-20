@@ -2,10 +2,10 @@
 
 #include <stdint.h>
 
-#define STACK_SIZE 4096
+#include "handle_exceptions.h"
 
-extern volatile uint8_t stack_a[STACK_SIZE];
-extern volatile uint8_t stack_b[STACK_SIZE];
+#define MAX_THREADS 8
+#define STACK_SIZE (16 * 1024)
 
 typedef struct {
 	uint64_t x19;
@@ -25,21 +25,34 @@ typedef struct {
 	uint64_t sp;
 } context_t;
 
+typedef enum {
+	THREAD_READY,
+	THREAD_RUNNING,
+	THREAD_BLOCKED,
+} thread_state_t;
+
 typedef struct {
-	context_t context;
 	uint32_t id;
+
+	thread_state_t state;
+
+	exception_frame_t* frame;
+
+	uint8_t* stack;
+	uint64_t stack_size;
 } thread_t;
 
-volatile extern thread_t boot_thread;
-volatile extern thread_t thread_a;
-volatile extern thread_t thread_b;
+extern volatile thread_t threads[MAX_THREADS];
+extern volatile thread_t* current_thread;
 
 void context_switch(context_t* old, context_t* new);
 
 void yield(void);
 
-void boot_thread_init(void);
-void thread_a_init(void);
-void thread_b_init(void);
-void thread_a_test(void);
-void thread_b_test(void);
+void threads_init(void);
+
+exception_frame_t* next_thread(exception_frame_t* frame);
+
+void thread_do_something();
+
+void thread_exit(void);

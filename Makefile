@@ -10,7 +10,8 @@ OBJDUMP =	aarch64-elf-objdump
 TARGET = kernel
 IMAGE = myos
 
-C_FLAGS =	-ffreestanding -O2 -Wall -Wextra -nostdlib -fno-stack-protector -fno-pie -Ilib/ -Idrivers/usart -Iarch/aarch64 -Ikernel -Idrivers/gic
+C_FLAGS =	-ffreestanding -O2 -Wall -Wextra -nostdlib -fno-stack-protector -fno-pie \
+		-Ilib/ -Idrivers/usart -Iarch/aarch64 -Ikernel -Idrivers/gic -Ilib/ccontainers -Ilib/cmemory
 C_FLAGS +=	-MMD -MP
 # Early kernel code does not enable FP/SIMD registers.
 C_FLAGS +=	-mgeneral-regs-only

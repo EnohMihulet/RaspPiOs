@@ -5,6 +5,7 @@
 #include "timer.h"
 #include "printk.h"
 #include "thread.h"
+#include "scheduler.h"
 
 static inline uint64_t read_current_el(void) {
 	uint64_t value;
@@ -59,14 +60,13 @@ int kernel_main(uint64_t dtb_address) {
 
 	dsb_sy();
 
+	threads_init();
+	kprintf("Threads initialized.\r\n");
+
+	scheduler_init();
+	kprintf("Scheduler initialized.\r\n");
+	
 	enable_irqs();
-
-	boot_thread_init();
-
-	thread_a_init();
-	thread_b_init();
-
-	context_switch(&(boot_thread.context), &(thread_a.context));
 
 	for (;;) {
 		__asm__ volatile("wfe");

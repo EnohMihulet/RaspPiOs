@@ -52,7 +52,7 @@ exception_vectors:
 .macro save_exception_frame
 	sub	sp, sp, #288
 
-	stp	x0, x1, [sp, #0*16]
+	stp	x0, x1, [sp, #0*16]   
 	stp	x2, x3, [sp, #1*16]
 	stp	x4, x5, [sp, #2*16]
 	stp	x6, x7, [sp, #3*16]
@@ -74,6 +74,10 @@ exception_vectors:
 	stp	x1, x2, [sp, #256]
 
 	add	x0, sp, #288
+
+	// SPSR_EL1 bit 0:
+	// 0 = EL0t (or EL1t), uses SP_EL0
+	// 1 = EL1h, uses SP_EL1
 	tbnz	x2, #0, .Lsave_sp\@
 	mrs	x0, SP_EL0
 
@@ -87,34 +91,42 @@ exception_vectors:
 	mov	x0, sp // First C argument: exception_frame *.
 .endm
 
-// Restore return state before restoring the scratch registers.
 .macro restore_exception_frame
+	// x0 = pointer returned by irq_handler.
+	// Switch to the selected exception frame.
+	mov	sp, x0
 	ldp	x1, x2, [sp, #256]
 	msr	ELR_EL1, x1
 	msr	SPSR_EL1, x2
+
+	// SPSR_EL1 bit 0:
+	// 0 = EL0t (or EL1t), uses SP_EL0
+	// 1 = EL1h, uses SP_EL1
 	tbnz	x2, #0, .Lrestore_sp\@
-	ldr	x0, [sp, #248]
-	msr	SP_EL0, x0
+
+	ldr	x1, [sp, #248]
+	msr	SP_EL0, x1
 .Lrestore_sp\@:
+	// Restore general-purpose registers.
+	ldp	x0, x1, [sp, #0*16]
+	ldp	x2, x3, [sp, #1*16]
+	ldp	x4, x5, [sp, #2*16]
+	ldp	x6, x7, [sp, #3*16]
+	ldp	x8, x9, [sp, #4*16]
+	ldp	x10, x11, [sp, #5*16]
+	ldp	x12, x13, [sp, #6*16]
+	ldp	x14, x15, [sp, #7*16]
+	ldp	x16, x17, [sp, #8*16]
+	ldp	x18, x19, [sp, #9*16]
+	ldp	x20, x21, [sp, #10*16]
+	ldp	x22, x23, [sp, #11*16]
+	ldp	x24, x25, [sp, #12*16]
+	ldp	x26, x27, [sp, #13*16]
+	ldp	x28, x29, [sp, #14*16]
+	ldr	x30, [sp, #15*16]
 
-	ldp	x0, x1, [sp], #16
-	ldp	x2, x3, [sp], #16
-	ldp	x4, x5, [sp], #16
-	ldp	x6, x7, [sp], #16
-	ldp	x8, x9, [sp], #16
-	ldp	x10, x11, [sp], #16
-	ldp	x12, x13, [sp], #16
-	ldp	x14, x15, [sp], #16
-	ldp	x16, x17, [sp], #16
-	ldp	x18, x19, [sp], #16
-	ldp	x20, x21, [sp], #16
-	ldp	x22, x23, [sp], #16
-	ldp	x24, x25, [sp], #16
-	ldp	x26, x27, [sp], #16
-	ldp	x28, x29, [sp], #16
-	ldr	x30, [sp], #16
-
-	add	sp, sp, #32
+	// Restore selected kernel stack position.
+	add	sp, sp, #288
 .endm
 
 sync_sp0:

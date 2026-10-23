@@ -3,6 +3,7 @@
 #include "handle_exceptions.h"
 #include "printk.h"
 #include "gic.h"
+#include "thread.h"
 #include "timer.h"
 #include "scheduler.h"
 
@@ -17,22 +18,42 @@ void dump_exception_frame(exception_frame_t* frame) {
 	kprintf("far  = 0x%lx\r\n", frame->far_el1);
 }
 
-void sync_handler(exception_frame_t* frame) {
+exception_frame_t* sync_handler(exception_frame_t* frame) {
+	exception_frame_t* return_frame = frame;
 	uint32_t ec = (uint32_t)((frame->esr_el1 >> 26) & 0x3fu);
 
-	kprintf("Synchronous Exception: EC=0x%x\r\n", ec);
-	dump_exception_frame(frame);
-	panic("Synchronous Exception\r\n");
+	if (ec == 0x15) {
+		uint32_t op = (uint32_t)(frame->esr_el1 & 0xffffu);
+		
+		switch (op) {
+		case 0:
+			return_frame = next_thread(frame);
+			break;
+		case 1:
+			current_thread->state = THREAD_DEAD;
+			return_frame = next_thread(frame);
+			break;
+		case 2:
+			current_thread->state = THREAD_BLOCKED;
+			return_frame = next_thread(frame);
+			break;
+		default:
+			panic("Invalid svc operand.\r\n");
+		}
+	}
+	else {
+		kprintf("Synchronous Exception: EC=0x%x\r\n", ec);
+		dump_exception_frame(frame);
+		panic("Synchronous Exception\r\n");
+	}
+
+	return return_frame;
 }
 
 exception_frame_t* irq_handler(exception_frame_t* frame) {
 	exception_frame_t* return_frame = frame;
 	uint32_t iar = gic_acknowledge_irq();
 	uint32_t irq = iar & GICC_IAR_INTID_MASK;
-
-	// if (irq >= 1020u) {
-	// 	return NULL;
-	// }
 
 	if (irq == GIC_IRQ_TIMER_PHYS_NS) {
 		timer_rearm();
@@ -53,4 +74,12 @@ _Noreturn void panic(const char* message) {
 	for (;;) {
 		__asm__ volatile("wfe");
 	}
+}
+
+void enable_irqs(void) {
+	__asm__ volatile("msr daifclr, #2" ::: "memory");
+}
+
+void disable_irqs(void) {
+	__asm__ volatile("msr daifset, #2" ::: "memory");
 }

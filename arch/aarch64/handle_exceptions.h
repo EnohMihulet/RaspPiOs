@@ -29,8 +29,11 @@ _Static_assert(sizeof(exception_frame_t) == 288, "exception frame size");
 
 void dump_exception_frame_t(exception_frame_t* frame);
 
-void sync_handler(exception_frame_t* frame);
+exception_frame_t* sync_handler(exception_frame_t* frame);
 
 exception_frame_t* irq_handler(exception_frame_t* frame);
 
 _Noreturn void panic(const char* message);
+
+void enable_irqs(void);
+void disable_irqs(void);

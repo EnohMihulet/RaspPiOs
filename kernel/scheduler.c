@@ -1,48 +1,156 @@
+#include "alloc.h"
 #include "scheduler.h"
+#include "gic.h"
+#include "handle_exceptions.h"
+#include "printk.h"
 #include "thread.h"
-
-#define FREE_LIST_IMPLEMENTATION
-#include "freelist.h"
 
 #define RING_BUFFER_NO_STDLIB
 #include "ring_buffer.h"
+
 typedef thread_t* thread_t_ptr;
 RING_BUFFER_DECLARE(threadq, thread_t_ptr)
 RING_BUFFER_DEFINE(threadq, thread_t_ptr)
 
-freelist_allocator _allocator;
-static uint8_t* _allocator_memory[1024];
+threadq_ring_buffer ready_threadq;
+threadq_ring_buffer cleanup_threadq;
 
-container_allocator allocator = {
+volatile bool SCHEDULER_STOPPED = false;
+
+static container_allocator allocator = {
 	.allocate = freelist_container_allocate,
 	.deallocate = freelist_container_deallocate,
 	.context = &_allocator,
 };
 
-threadq_ring_buffer thread_queue;
+void scheduler_init(void) {
 
-void scheduler_init() {
+	disable_irqs();
 
-	if (freelist_init(&_allocator, _allocator_memory, 1024) != FREELIST_OK) {
-		panic("freelist_init() failed.\r\n");
-	}
-
-	if (threadq_init(&thread_queue, &allocator) != 0) {
+	if (threadq_init(&ready_threadq, &allocator) != 0) {
 		panic("threadq_init() failed.\r\n");
 	}
 
-	for (uint32_t i = 0; i < MAX_THREADS; i++) {
-		if (threadq_push_back(&thread_queue, (thread_t_ptr)&threads[i]) != 0) panic("threadq_push_back() failed.\r\n");
+	if (threadq_init(&cleanup_threadq, &allocator) != 0) {
+		panic("threadq_init() failed.\r\n");
 	}
+
+	enable_irqs();
 }
 
 thread_t* scheduler_next(void) {
-	if (threadq_is_empty(&thread_queue)) panic("thread queue is empty.\r\n");
 
-	thread_t* next;
-	threadq_pop_front(&thread_queue, &next);
-	if (next == NULL) panic("threadq_pop_front() next is null.\r\n");
-	threadq_push_back(&thread_queue, (thread_t_ptr)current_thread);
+	thread_t* thread = (thread_t*)current_thread;
+
+	if (thread->id != THREAD_ID_DEFAULT_THREAD && thread->state == THREAD_RUNNING) {
+		thread->state = THREAD_READY;
+		threadq_push_back(&ready_threadq, thread);
+	}
+	else if (thread->state == THREAD_DEAD) {
+		scheduler_delete(thread);
+	}
+	else if (thread->state == THREAD_READY) {
+		kprintf("WHY: current_thread is ready\r\n");
+	}
+	
+	thread_t_ptr next;
+	if (threadq_pop_front(&ready_threadq, &next) == 1) {
+		next = (thread_t*)&default_thread;
+	}
 
 	return next;
+}
+
+int scheduler_add(thread_t* thread) {
+
+	disable_irqs();
+
+	if (thread == NULL) return 1;
+
+	if (threadq_push_back(&ready_threadq, (thread_t_ptr)thread) == 1) return 1;
+
+	enable_irqs();
+
+	return 0;
+}
+
+static int scheduler_add_to_ready(thread_t* thread) {
+	if (thread == NULL) return 1;
+
+	threadq_push_back(&ready_threadq, (thread_t_ptr)thread);
+
+	return 0;
+}
+
+static int scheduler_remove_from_ready(thread_t* thread) {
+	if (thread == NULL) return 1;
+
+	uint32_t index = 0;
+	threadq_iter iter = threadq_iter_begin(&ready_threadq);
+	const thread_t_ptr* out = NULL;
+	while (threadq_iter_next(&iter, &out)) {
+		if (*out == thread) {
+			if (threadq_remove(&ready_threadq, index, NULL) == 1) {
+				panic("Failed to remove thread from ready_threadq.\r\n");
+			}
+			break;
+		}
+
+		index += 1;
+
+	}
+
+	return 0;
+}
+
+static int scheduler_add_to_cleanup(thread_t* thread) {
+	if (thread == NULL) return 1;
+
+	if (threadq_push_back(&cleanup_threadq, (thread_t_ptr)thread) == 1) {
+		panic("Failed to push thread into cleanup queue.\r\n");
+	}
+
+	return 0;
+}
+
+int scheduler_wakeup(thread_t* thread) {
+	if (thread == NULL) return 1;
+
+	thread->state = THREAD_READY;
+
+	scheduler_add_to_ready(thread);
+
+	return 0;
+}
+
+int scheduler_delete(thread_t* thread) {
+	if (thread == NULL) return 1;
+
+	thread->state = THREAD_DEAD;
+
+	if (thread == current_thread) {
+		scheduler_add_to_cleanup(thread);
+	}
+	else {
+		scheduler_remove_from_ready(thread);
+		scheduler_add_to_cleanup(thread);
+	}
+
+	return 0;
+}
+
+void scheduler_cleanup(void) {
+	thread_t* thread;
+	bool curr_found = false;
+
+	kprintf("Cleanup\r\n");
+	while (threadq_pop_front(&cleanup_threadq, &thread) == 0) {
+		if (thread == current_thread) {
+			curr_found = true;
+			continue;
+		}
+		thread_reclaim(thread);
+	}
+
+	if (curr_found) threadq_push_back(&cleanup_threadq, (thread_t*)current_thread);
 }

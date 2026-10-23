@@ -9,3 +9,4 @@ compile_commands.json
 .cache
 
 copy_img_to_sdcard.sh
+screen.sh

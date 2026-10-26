@@ -27,13 +27,13 @@ _Static_assert(offsetof(exception_frame_t, esr_el1) == 272, "exception frame ESR
 _Static_assert(offsetof(exception_frame_t, far_el1) == 280, "exception frame FAR offset");
 _Static_assert(sizeof(exception_frame_t) == 288, "exception frame size");
 
-void dump_exception_frame_t(exception_frame_t* frame);
+void dump_exception_frame(const exception_frame_t* frame);
 
 exception_frame_t* sync_handler(exception_frame_t* frame);
-
 exception_frame_t* irq_handler(exception_frame_t* frame);
-
-_Noreturn void panic(const char* message);
 
 void enable_irqs(void);
 void disable_irqs(void);
+
+_Noreturn void panic(const char* message);
+

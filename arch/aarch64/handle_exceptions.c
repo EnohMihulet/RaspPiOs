@@ -5,9 +5,9 @@
 #include "gic.h"
 #include "thread.h"
 #include "timer.h"
-#include "scheduler.h"
+#include "sync_handlers.h"
 
-void dump_exception_frame(exception_frame_t* frame) {
+void dump_exception_frame(const exception_frame_t* frame) {
 	for (int i = 0; i < 31; i++) {
 		kprintf("x%d = 0x%lx\r\n", i, frame->x[i]);
 	}
@@ -19,35 +19,21 @@ void dump_exception_frame(exception_frame_t* frame) {
 }
 
 exception_frame_t* sync_handler(exception_frame_t* frame) {
-	exception_frame_t* return_frame = frame;
-	uint32_t ec = (uint32_t)((frame->esr_el1 >> 26) & 0x3fu);
+	if (frame == NULL) panic("sync_handler frame NULL");
 
-	if (ec == 0x15) {
-		uint32_t op = (uint32_t)(frame->esr_el1 & 0xffffu);
-		
-		switch (op) {
-		case 0:
-			return_frame = next_thread(frame);
-			break;
-		case 1:
-			current_thread->state = THREAD_DEAD;
-			return_frame = next_thread(frame);
-			break;
-		case 2:
-			current_thread->state = THREAD_BLOCKED;
-			return_frame = next_thread(frame);
-			break;
-		default:
-			panic("Invalid svc operand.\r\n");
-		}
-	}
-	else {
-		kprintf("Synchronous Exception: EC=0x%x\r\n", ec);
+	uint32_t ec = ESR_EC(frame->esr_el1);
+
+	const exception_info_t* info = &exception_info[ec];
+	if (info->handler == NULL) {
+		kprintf("Unhandled synchronous exception: EC=0x%x\r\n", ec);
+		kprintf("%s: %s\r\n",
+			info->name ? info->name : "Unlisted EC",
+			info->message ? info->message : "No description available");
 		dump_exception_frame(frame);
-		panic("Synchronous Exception\r\n");
+		panic("Unhandled synchronous exception");
 	}
 
-	return return_frame;
+	return info->handler(frame);
 }
 
 exception_frame_t* irq_handler(exception_frame_t* frame) {

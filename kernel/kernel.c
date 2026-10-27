@@ -56,6 +56,11 @@ static inline void worker(void* arg) {
 	kprintf("worker: wake up\r\n");
 	test_stage = 2;
 
+	kprintf("worker: sleep for 1000 ms\r\n");
+	thread_sleep(1000);
+	kprintf("worker: sleep complete\r\n");
+	test_stage = 3;
+
 	if (exit_on_return) {
 		kprintf("worker: exit\r\n");
 		return;
@@ -84,6 +89,9 @@ static void thread_test(void* arg) {
 		
 		while (test_stage < 2) thread_yield();
 
+		kprintf("test: controller running while worker sleeps\r\n");
+		while (test_stage < 3) thread_yield();
+
 		if (!exit_on_return) {
 			if (thread_delete(id) != 0) panic("test: thread_delete failed.\r\n");
 			
@@ -111,9 +119,7 @@ int kernel_main(uint64_t dtb_address) {
 
 	gic_init();
 
-	uint32_t freq = timer_get_frequency();
-	timer_set_tval(freq);
-	timer_set_ctl(1);
+	timer_init();
 
 	dsb_sy();
 
@@ -125,11 +131,11 @@ int kernel_main(uint64_t dtb_address) {
 
 	kprintf("threads_init() successful.\r\n");
 
-	enable_irqs();
-
 	scheduler_init();
 
 	kprintf("scheduler_init() successful.\r\n");
+
+	enable_irqs();
 
 	thread_id_t test_id;
 	if (thread_create(thread_test, NULL, &test_id) != 0) panic("test: could not create controller.\r\n");
@@ -138,4 +144,3 @@ int kernel_main(uint64_t dtb_address) {
 		__asm__ volatile("wfe");
 	}
 }
-

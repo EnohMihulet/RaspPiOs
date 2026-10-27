@@ -64,7 +64,8 @@ extern const exception_info_t exception_info[EC_COUNT];
 #define EXTRACT_BITS(value, lsb, width) (((uint64_t)(value) >> (lsb)) & (UINT64_MAX >> (64u - (width))))
 
 typedef enum {
-	svc_thread_yield = 0,
-	svc_thread_exit  = 1,
-	svc_thread_block = 2,
+	svc_thread_yield    = 0,
+	svc_thread_exit     = 1,
+	svc_thread_block    = 2,
+	svc_thread_sleeping = 3,
 } svc_codes_t;

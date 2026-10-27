@@ -2,6 +2,7 @@
 #include "handle_exceptions.h"
 #include "thread.h"
 #include "printk.h"
+#include "timer.h"
 
 #define X(NAME, VALUE, HANDLER, MESSAGE) [VALUE] = {#NAME, MESSAGE, HANDLER},
 const exception_info_t exception_info[EC_COUNT] = {
@@ -27,6 +28,12 @@ exception_frame_t* svc_handler(exception_frame_t * frame) {
 		current_thread->state = THREAD_BLOCKED;
 		return_frame = next_thread(frame);
 		break;
+	case svc_thread_sleeping: {
+		current_thread->wakeup_deadline = get_now() + ms_to_counter(frame->x[0]);
+		current_thread->state = THREAD_SLEEPING;
+		return_frame = next_thread(frame);
+		break;
+		}
 	default:
 		kprintf("Invalid svc operand: 0x%x\r\n", (uint32_t)op);
 		dump_exception_frame(frame);

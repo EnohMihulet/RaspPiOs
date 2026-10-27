@@ -1,10 +1,12 @@
+#include <stdint.h>
+
 #include "alloc.h"
 #include "thread.h"
 #include "handle_exceptions.h"
 #include "printk.h"
 #include "string.h"
 #include "scheduler.h"
-#include <stdint.h>
+#include "timer.h"
 
 #define RING_BUFFER_NO_STDLIB
 #include "ring_buffer.h"
@@ -91,6 +93,7 @@ exception_frame_t* next_thread(exception_frame_t* frame) {
 
 	next->state = THREAD_RUNNING;
 	current_thread = next;
+	scheduler_deadline = get_now() + ms_to_counter(scheduler_delay_ms);
 
 	return next->frame;
 }
@@ -182,3 +185,7 @@ void thread_block(void) {
 	__asm__ volatile("svc #2" ::: "memory");
 }
 
+void thread_sleep(uint32_t duration_ms) {
+	register uint64_t x0 __asm__("x0") = duration_ms;
+	__asm__ volatile("svc #3" : "+r"(x0) :: "memory");
+}

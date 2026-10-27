@@ -1,6 +1,14 @@
 #include <stdint.h>
 
-volatile uint64_t timer_ticks = 0;
+#include "timer.h"
+
+volatile uint64_t timer_ticks_ms = 0;
+
+void timer_init(void) {
+	uint32_t freq = timer_get_frequency();
+	timer_set_tval(freq / 1000);
+	timer_set_ctl(1);
+}
 
 uint64_t timer_get_frequency(void) {
 	uint64_t freq;
@@ -53,10 +61,22 @@ void delay_ms(uint64_t ms) {
 	while ((timer_get_count() - start) < ticks) {}
 }
 
-void timer_rearm() {
-	timer_ticks++;
+uint64_t get_now() {
+	return timer_get_count();
+}
+
+uint64_t ms_to_counter(uint64_t ms) {
+	return (timer_get_frequency() * ms) / 1000;
+}
+
+uint64_t s_to_counter(uint64_t s) {
+	return (timer_get_frequency() * s);
+}
+
+void timer_rearm(void) {
+	timer_ticks_ms++;
 
 	uint32_t freq = timer_get_frequency();
 
-	timer_set_tval(freq);
+	timer_set_tval(freq / 1000);
 }

@@ -3,6 +3,7 @@
 #include "handle_exceptions.h"
 #include "printk.h"
 #include "gic.h"
+#include "scheduler.h"
 #include "thread.h"
 #include "timer.h"
 #include "sync_handlers.h"
@@ -42,9 +43,22 @@ exception_frame_t* irq_handler(exception_frame_t* frame) {
 	uint32_t irq = iar & GICC_IAR_INTID_MASK;
 
 	if (irq == GIC_IRQ_TIMER_PHYS_NS) {
-		timer_rearm();
+		uint64_t now = get_now();
 
-		return_frame = next_thread(frame);
+		for (uint32_t i = 0; i < MAX_THREADS; i++) {
+			thread_t* thread = (thread_t*)&threads[i];
+
+			if (thread->state == THREAD_SLEEPING && now >= thread->wakeup_deadline) {
+				scheduler_wakeup(thread);
+			}
+		}
+
+		if (current_thread->id == THREAD_ID_DEFAULT_THREAD || now >= scheduler_deadline) {
+			return_frame = next_thread(frame);
+		}
+
+		timer_rearm();
+		
 	}
 
 	gic_end_irq(iar);

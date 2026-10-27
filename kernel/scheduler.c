@@ -4,6 +4,7 @@
 #include "handle_exceptions.h"
 #include "printk.h"
 #include "thread.h"
+#include "timer.h"
 
 #define RING_BUFFER_NO_STDLIB
 #include "ring_buffer.h"
@@ -15,7 +16,8 @@ RING_BUFFER_DEFINE(threadq, thread_t_ptr)
 threadq_ring_buffer ready_threadq;
 threadq_ring_buffer cleanup_threadq;
 
-volatile bool SCHEDULER_STOPPED = false;
+volatile uint64_t scheduler_delay_ms = 20;
+volatile uint64_t scheduler_deadline = 0;
 
 static container_allocator allocator = {
 	.allocate = freelist_container_allocate,
@@ -25,8 +27,6 @@ static container_allocator allocator = {
 
 void scheduler_init(void) {
 
-	disable_irqs();
-
 	if (threadq_init(&ready_threadq, &allocator) != 0) {
 		panic("threadq_init() failed.\r\n");
 	}
@@ -35,7 +35,7 @@ void scheduler_init(void) {
 		panic("threadq_init() failed.\r\n");
 	}
 
-	enable_irqs();
+	scheduler_deadline = get_now();
 }
 
 thread_t* scheduler_next(void) {

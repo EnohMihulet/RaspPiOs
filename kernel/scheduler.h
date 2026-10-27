@@ -4,6 +4,9 @@
 
 #include "thread.h"
 
+extern volatile uint64_t scheduler_delay_ms;
+extern volatile uint64_t scheduler_deadline;
+
 void scheduler_init(void);
 
 thread_t* scheduler_next(void);

@@ -10,3 +10,6 @@ compile_commands.json
 
 copy_img_to_sdcard.sh
 screen.sh
+
+bcm2712-rpi-b.dtb
+rpi5.dts

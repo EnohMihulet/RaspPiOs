@@ -5,6 +5,7 @@
 #include "timer.h"
 #include "printk.h"
 #include "thread.h"
+#include "memmap.h"
 #include "scheduler.h"
 #include "alloc.h"
 
@@ -124,15 +125,18 @@ int kernel_main(uint64_t dtb_address) {
 	dsb_sy();
 
 	alloc_init();
-	
 	kprintf("alloc_init() successful.\r\n");
 
-	threads_init();
+	memmap_map_t memmap;
+	if (memmap_init(&memmap, (void*)dtb_address) != 0) panic("memmap_init() failed.\r\n");
+	if (memmap_add_ram(&memmap) != 0) panic("memmap_add_ram() failed.\r\n");
+	if (memmap_reserve(&memmap) != 0) panic("memmap_reserve() failed.\r\n");
+	if (memmap_finalize(&memmap) != 0) panic("memmap_finalize() failed.\r\n");
 
+	threads_init();
 	kprintf("threads_init() successful.\r\n");
 
 	scheduler_init();
-
 	kprintf("scheduler_init() successful.\r\n");
 
 	enable_irqs();

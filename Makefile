@@ -7,7 +7,7 @@ OBJDUMP = aarch64-elf-objdump
 
 HOST_CC   ?= cc
 ET_DIR     = tests/framework/Embedded-Test/et
-HOST_TEST_NAMES = test_convert test_fdt test_memmap
+HOST_TEST_NAMES = test_fdt test_memmap test_page_alloc
 HOST_TESTS = $(addprefix $(BUILD_DIR)/tests/,$(HOST_TEST_NAMES))
 HOST_CFLAGS ?= -std=c11 -Wall -Wextra
 HOST_CPPFLAGS ?= -iquote lib -iquote lib/ccontainers -iquote lib/cmemory -iquote kernel
@@ -75,6 +75,7 @@ $(BUILD_DIR)/tests/test_convert: lib/convert.c lib/convert.h
 $(BUILD_DIR)/tests/test_fdt: lib/fdt.h
 $(BUILD_DIR)/tests/test_fdt $(BUILD_DIR)/tests/test_memmap: tests/host/fdt_builder.h
 $(BUILD_DIR)/tests/test_memmap: kernel/memmap.c kernel/memmap.h lib/fdt.h lib/ccontainers/dynamic_array.h kernel/alloc.h lib/cmemory/freelist.h lib/align.h kernel/page_allocator.h
+$(BUILD_DIR)/tests/test_page_alloc: kernel/page_allocator.c kernel/page_allocator.h kernel/memmap.c kernel/memmap.h lib/fdt.h lib/ccontainers/dynamic_array.h kernel/alloc.h lib/cmemory/freelist.h lib/align.h tests/host/fdt_builder.h
 
 $(HOST_TESTS): $(BUILD_DIR)/tests/%: tests/host/%.c \
 		$(ET_DIR)/et.c $(ET_DIR)/et.h $(ET_DIR)/et_host.c

@@ -143,7 +143,6 @@ void scheduler_cleanup(void) {
 	thread_t* thread;
 	bool curr_found = false;
 
-	kprintf("Cleanup\r\n");
 	while (threadq_pop_front(&cleanup_threadq, &thread) == 0) {
 		if (thread == current_thread) {
 			curr_found = true;

@@ -9,11 +9,7 @@ freelist_allocator _allocator;
 _Alignas(16) uint8_t _allocator_memory[ALLOCATOR_ARENA_SIZE];
 
 static bool allocator_ready;
-static bool memmap_ready;
 static memmap_map_t map;
-
-#define REQUIRE_ALLOCATOR() VERIFY(allocator_ready)
-#define REQUIRE_MEMMAP() VERIFY(memmap_ready)
 
 void setup(void) {
 	map = (memmap_map_t){0};
@@ -26,19 +22,95 @@ static bool init_dtb(const test_dtb_spec_t* spec) {
 
 static bool init_map(const test_dtb_spec_t* spec) {
 	if (!init_dtb(spec)) return false;
-	return memmap_init(&map, buffer) == 0;
+	return memmap_init(&map, buffer, 0) == 0;
 }
 
 void teardown(){}
 
 TEST_GROUP("test memmap") {
+	TEST("iterator returns finalized ranges in order and copies values") {
+		const test_range_t ram[] = {{0x8001, 0x3fff}, {0x1001, 0x3fff}};
+		const test_dtb_spec_t spec = {.ram = ram, .ram_count = 2};
+		VERIFY(init_map(&spec));
+		VERIFY(memmap_add_ram(&map) == 0);
+		VERIFY(memmap_finalize(&map) == 0);
+		memmap_iter_t iter;
+		memmap_region_t out;
+		VERIFY(memmap_iter_init(&map, &iter) == MEM_ITER_SUCCESS);
+		VERIFY(memmap_iter_next(&iter, &out) == MEM_ITER_SUCCESS);
+		VERIFY(out.base == 0x2000 && out.size == 0x3000 && out.type == MEM_USABLE);
+		out.base = 0;
+		VERIFY(map.regions.data[0].base == 0x2000);
+		VERIFY(memmap_iter_next(&iter, &out) == MEM_ITER_SUCCESS);
+		VERIFY(out.base == 0x9000 && out.size == 0x3000 && out.type == MEM_USABLE);
+		for (size_t i = 0; i < 2; i++) {
+			VERIFY(memmap_iter_next(&iter, &out) == MEM_ITER_NO_MORE_REGIONS);
+			VERIFY(out.base == 0x9000 && out.size == 0x3000 && out.type == MEM_USABLE);
+		}
+	}
+
+	TEST("empty iterator initializes and remains exhausted") {
+		const test_dtb_spec_t spec = {0};
+		VERIFY(init_map(&spec));
+		VERIFY(memmap_finalize(&map) == 0);
+		memmap_iter_t iter = {.idx = 42, .map = NULL};
+		memmap_region_t out = {0x1234, 0x5678, MEM_RESERVED};
+		VERIFY(memmap_iter_init(&map, &iter) == MEM_ITER_SUCCESS);
+		for (size_t i = 0; i < 2; i++) {
+			VERIFY(memmap_iter_next(&iter, &out) == MEM_ITER_NO_MORE_REGIONS);
+			VERIFY(out.base == 0x1234 && out.size == 0x5678 && out.type == MEM_RESERVED);
+		}
+	}
+
+	TEST("iterators have independent positions and can restart") {
+		const test_range_t ram[] = {{0x1000, 0x2000}, {0x8000, 0x1000}};
+		const test_dtb_spec_t spec = {.ram = ram, .ram_count = 2};
+		VERIFY(init_map(&spec));
+		VERIFY(memmap_add_ram(&map) == 0);
+		VERIFY(memmap_finalize(&map) == 0);
+		memmap_iter_t first, second;
+		memmap_region_t out;
+		VERIFY(memmap_iter_init(&map, &first) == MEM_ITER_SUCCESS);
+		VERIFY(memmap_iter_init(&map, &second) == MEM_ITER_SUCCESS);
+		VERIFY(memmap_iter_next(&first, &out) == MEM_ITER_SUCCESS);
+		VERIFY(memmap_iter_next(&first, &out) == MEM_ITER_SUCCESS);
+		VERIFY(out.base == 0x8000);
+		VERIFY(memmap_iter_next(&second, &out) == MEM_ITER_SUCCESS);
+		VERIFY(out.base == 0x1000);
+		VERIFY(memmap_iter_next(&first, &out) == MEM_ITER_NO_MORE_REGIONS);
+		VERIFY(memmap_iter_init(&map, &first) == MEM_ITER_SUCCESS);
+		VERIFY(memmap_iter_next(&first, &out) == MEM_ITER_SUCCESS);
+		VERIFY(out.base == 0x1000);
+		VERIFY(memmap_iter_next(&second, &out) == MEM_ITER_SUCCESS);
+		VERIFY(out.base == 0x8000);
+	}
+
+	TEST("iterator rejects invalid arguments without consuming a region") {
+		const test_range_t ram[] = {{0x1000, 0x2000}};
+		const test_dtb_spec_t spec = {.ram = ram, .ram_count = 1};
+		VERIFY(init_map(&spec));
+		VERIFY(memmap_add_ram(&map) == 0);
+		VERIFY(memmap_finalize(&map) == 0);
+		memmap_iter_t iter = {0};
+		memmap_region_t out;
+		VERIFY(memmap_iter_init(NULL, &iter) == MEM_ITER_ERROR);
+		VERIFY(memmap_iter_init(&map, NULL) == MEM_ITER_ERROR);
+		VERIFY(memmap_iter_next(NULL, &out) == MEM_ITER_ERROR);
+		VERIFY(memmap_iter_next(&iter, &out) == MEM_ITER_ERROR);
+		VERIFY(memmap_iter_init(&map, &iter) == MEM_ITER_SUCCESS);
+		VERIFY(memmap_iter_next(&iter, NULL) == MEM_ITER_ERROR);
+		VERIFY(memmap_iter_next(&iter, &out) == MEM_ITER_SUCCESS);
+		VERIFY(out.base == 0x1000 && out.size == 0x2000 && out.type == MEM_USABLE);
+		VERIFY(memmap_iter_next(&iter, &out) == MEM_ITER_NO_MORE_REGIONS);
+	}
+
 	TEST("initialization") {
 		const test_dtb_spec_t spec = {0};
 		init_dtb(&spec);
 		memmap_map_t fresh = {0};
-		VERIFY(memmap_init(&fresh, buffer) == 0);
-		VERIFY(memmap_init(NULL, buffer) == 1);
-		VERIFY(memmap_init(&fresh, NULL) == 1);
+		VERIFY(memmap_init(&fresh, buffer, 0) == 0);
+		VERIFY(memmap_init(NULL, buffer, 0) == 1);
+		VERIFY(memmap_init(&fresh, NULL, 0) == 1);
 	}
 
 	TEST("add two separate RAM ranges") {
@@ -178,7 +250,7 @@ TEST_GROUP("test memmap") {
 		VERIFY(init_map(&spec));
 
 		VERIFY(memmap_add_ram(&map) == 0);
-		VERIFY(memmap_reserve(&map) == 0);
+		VERIFY(memmap_reserve(&map, 0, 0) == 0);
 		VERIFY(map.regions.size == 2);
 		const memmap_region_t* first = memmap_regions_const_at(&map.regions, 0);
 		const memmap_region_t* second = memmap_regions_const_at(&map.regions, 1);
@@ -204,7 +276,7 @@ TEST_GROUP("test memmap") {
 		VERIFY(init_map(&spec));
 
 		VERIFY(memmap_add_ram(&map) == 0);
-		VERIFY(memmap_reserve(&map) == 0);
+		VERIFY(memmap_reserve(&map, 0, 0) == 0);
 		VERIFY(map.regions.size == 1);
 		const memmap_region_t* first = memmap_regions_const_at(&map.regions, 0);
 		VERIFY(first->base == 0x2000 && first->size == 0x2000);
@@ -227,7 +299,7 @@ TEST_GROUP("test memmap") {
 		VERIFY(init_map(&spec));
 
 		VERIFY(memmap_add_ram(&map) == 0);
-		VERIFY(memmap_reserve(&map) == 0);
+		VERIFY(memmap_reserve(&map, 0, 0) == 0);
 		VERIFY(map.regions.size == 0);
 	}
 
@@ -247,7 +319,7 @@ TEST_GROUP("test memmap") {
 		VERIFY(init_map(&spec));
 
 		VERIFY(memmap_add_ram(&map) == 0);
-		VERIFY(memmap_reserve(&map) == 0);
+		VERIFY(memmap_reserve(&map, 0, 0) == 0);
 		VERIFY(map.regions.size == 1);
 		const memmap_region_t* first= memmap_regions_const_at(&map.regions, 0);
 		VERIFY(first->base == 0x6000 && first->size == 0x1000);
@@ -270,7 +342,7 @@ TEST_GROUP("test memmap") {
 		VERIFY(init_map(&spec));
 
 		VERIFY(memmap_add_ram(&map) == 0);
-		VERIFY(memmap_reserve(&map) == 0);
+		VERIFY(memmap_reserve(&map, 0, 0) == 0);
 		VERIFY(map.regions.size == 2);
 		const memmap_region_t* first = memmap_regions_const_at(&map.regions, 0);
 		const memmap_region_t* second = memmap_regions_const_at(&map.regions, 1);
@@ -289,7 +361,7 @@ TEST_GROUP("test memmap") {
 		};
 		VERIFY(init_map(&spec));
 		VERIFY(memmap_add_ram(&map) == 0);
-		VERIFY(memmap_reserve(&map) == 0);
+		VERIFY(memmap_reserve(&map, 0, 0) == 0);
 		VERIFY(map.regions.size == 1);
 		VERIFY(map.regions.data[0].base == 0x2000);
 		VERIFY(map.regions.data[0].size == 0x3000);
@@ -307,7 +379,7 @@ TEST_GROUP("test memmap") {
 		};
 		VERIFY(init_map(&spec));
 		VERIFY(memmap_add_ram(&map) == 0);
-		VERIFY(memmap_reserve(&map) == 0);
+		VERIFY(memmap_reserve(&map, 0, 0) == 0);
 		VERIFY(map.regions.size == 2);
 		VERIFY(map.regions.data[0].base == 0x1000);
 		VERIFY(map.regions.data[0].size == 0x1000);
@@ -329,7 +401,7 @@ TEST_GROUP("test memmap") {
 		VERIFY(init_map(&spec));
 		VERIFY(memmap_add_ram(&map) == 0);
 		for (size_t pass = 0; pass < 2; pass++) {
-			VERIFY(memmap_reserve(&map) == 0);
+			VERIFY(memmap_reserve(&map, 0, 0) == 0);
 			VERIFY(map.regions.size == 2);
 			VERIFY(map.regions.data[0].base == 0x1000);
 			VERIFY(map.regions.data[0].size == 0x2000);
@@ -348,9 +420,9 @@ TEST_GROUP("test memmap") {
 		};
 		VERIFY(init_map(&spec));
 		VERIFY(memmap_add_ram(&map) == 0);
-		VERIFY(memmap_reserve(&map) == 0);
+		VERIFY(memmap_reserve(&map, 0, 0) == 0);
 		VERIFY(map.regions.size == 0);
-		VERIFY(memmap_reserve(&map) == 0);
+		VERIFY(memmap_reserve(&map, 0, 0) == 0);
 		VERIFY(map.regions.size == 0);
 	}
 
@@ -363,7 +435,7 @@ TEST_GROUP("test memmap") {
 		};
 		VERIFY(init_map(&spec));
 		VERIFY(memmap_add_ram(&map) == 0);
-		VERIFY(memmap_reserve(&map) == 0);
+		VERIFY(memmap_reserve(&map, 0, 0) == 0);
 		VERIFY(map.regions.size == 2);
 		VERIFY(map.regions.data[0].base == UINT64_C(0x100001000));
 		VERIFY(map.regions.data[0].size == 0x2000);
@@ -385,7 +457,7 @@ TEST_GROUP("test memmap") {
 			};
 			VERIFY(init_map(&spec));
 			VERIFY(memmap_add_ram(&map) == 0);
-			int result = memmap_reserve(&map);
+			int result = memmap_reserve(&map, 0, 0);
 			memmap_regions_destroy(&map.regions);
 			VERIFY(result == 1);
 		}
@@ -481,7 +553,7 @@ TEST_GROUP("test memmap") {
 		};
 		VERIFY(init_map(&spec));
 		VERIFY(memmap_add_ram(&map) == 0);
-		VERIFY(memmap_reserve(&map) == 0);
+		VERIFY(memmap_reserve(&map, 0, 0) == 0);
 		VERIFY(memmap_finalize(&map) == 0);
 		VERIFY(map.regions.size == 3);
 		VERIFY(map.regions.data[0].base == 0x1000);
@@ -506,6 +578,32 @@ TEST_GROUP("test memmap") {
 
 	TEST("finalize rejects a null map") {
 		VERIFY(memmap_finalize(NULL) == 1);
+	}
+	TEST("reserve explicit kernel and DTB physical ranges") {
+		const test_range_t ram[] = {{0x1000, 0x8000}};
+		const test_dtb_spec_t spec = {.ram = ram, .ram_count = 1};
+		VERIFY(init_dtb(&spec));
+		VERIFY(cursor < 0x1000);
+		VERIFY(memmap_init(&map, buffer, 0x6000) == 0);
+		VERIFY(memmap_add_ram(&map) == 0);
+		VERIFY(memmap_reserve(&map, 0x2800, 0x4800) == 0);
+		VERIFY(memmap_finalize(&map) == 0);
+		VERIFY(map.regions.size == 3);
+		VERIFY(map.regions.data[0].base == 0x1000 && map.regions.data[0].size == 0x1000);
+		VERIFY(map.regions.data[1].base == 0x5000 && map.regions.data[1].size == 0x1000);
+		VERIFY(map.regions.data[2].base == 0x7000 && map.regions.data[2].size == 0x2000);
+	}
+
+	TEST("reject reversed kernel bounds and overflowing DTB address") {
+		const test_range_t ram[] = {{0x1000, 0x8000}};
+		const test_dtb_spec_t spec = {.ram = ram, .ram_count = 1};
+		VERIFY(init_map(&spec));
+		VERIFY(memmap_add_ram(&map) == 0);
+		VERIFY(memmap_reserve(&map, 0x5000, 0x2000) == 1);
+		VERIFY(map.regions.size == 1);
+		VERIFY(map.regions.data[0].base == 0x1000 && map.regions.data[0].size == 0x8000);
+		memmap_map_t fresh = {0};
+		VERIFY(memmap_init(&fresh, buffer, UINT64_MAX) == 1);
 	}
 /*
 		for (size_t i = 0; i < map.regions.size; i++) {

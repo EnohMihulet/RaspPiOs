@@ -9,7 +9,9 @@
 
 DYNAMIC_ARRAY_DEFINE(memmap_regions, memmap_region_t)
 
+
 static size_t dtb_size;
+static uint64_t dtb_addr;
 static fdt_tree_t tree;
 
 static container_allocator allocator = {
@@ -18,12 +20,14 @@ static container_allocator allocator = {
 	.context = &_allocator
 };
 
-int memmap_init(memmap_map_t* map, void* dtb) {
+int memmap_init(memmap_map_t* map, const void* dtb, uint64_t dtb_phys_addr) {
 	if (map == NULL || dtb == NULL) return 1;
 
 	if (memmap_regions_init(&map->regions, &allocator) == 1) return 1;
 	if (fdt_read_header_size(dtb, FDT_HEADER_SIZE, &dtb_size) != FDT_SUCCESS) return 1;
 	if (fdt_init(&tree, dtb, dtb_size) != FDT_SUCCESS) return 1;
+	if (dtb_size > UINT64_MAX - dtb_phys_addr) return 1;
+	dtb_addr = dtb_phys_addr;
 
 	return 0;
 }
@@ -184,15 +188,18 @@ static int memmap_add_reserved(memmap_map_t* map) {
 	return 0;
 }
 
-int memmap_reserve(memmap_map_t* map) {
+int memmap_reserve(memmap_map_t* map, uint64_t kernel_start, uint64_t kernel_end) {
 	if (map == NULL || tree.data == NULL || tree.size != dtb_size) return 1;
+	if (kernel_end < kernel_start) return 1;
 
 	if (memmap_add_memreserve(map) == 1) return 1;
 	if (memmap_add_reserved(map) == 1) return 1;
+	if (memmap_reserve_region(map, (memmap_region_t){dtb_addr, dtb_size, MEM_RESERVED})) return 1;
+	if (kernel_start != kernel_end &&
+		memmap_reserve_region(map, (memmap_region_t){kernel_start, kernel_end - kernel_start, MEM_KERNEL})) return 1;
 
 	return 0;
 }
-
 int memmap_finalize(memmap_map_t* map) {
 	if (map == NULL) return 1;
 
@@ -217,4 +224,36 @@ int memmap_finalize(memmap_map_t* map) {
 	return 0;
 }
 
-int memmap_next_usable();
+memmap_iter_result_t memmap_iter_init(const memmap_map_t* map, memmap_iter_t* iter) {
+	if (map == NULL || iter == NULL) return MEM_ITER_ERROR;
+
+	iter->map = map;
+	iter->idx = 0;
+	return MEM_ITER_SUCCESS;
+}
+
+memmap_iter_result_t memmap_iter_next(memmap_iter_t* iter, memmap_region_t* out) {
+	if (iter == NULL || out == NULL) return MEM_ITER_ERROR;
+	if (iter->map == NULL) return MEM_ITER_ERROR;
+	if (iter->idx >= iter->map->regions.size) return MEM_ITER_NO_MORE_REGIONS;
+
+	const memmap_region_t* next = memmap_regions_const_at(&iter->map->regions, iter->idx);
+	if (next == NULL) return MEM_ITER_ERROR;
+	*out = *next;
+	iter->idx++;
+	return MEM_ITER_SUCCESS;
+}
+
+bool memmap_is_reserved(memmap_map_t* map, uint64_t addr) {
+	if (map == NULL) return true;
+
+	memmap_iter_t iter;
+	if (memmap_iter_init(map, &iter) != MEM_ITER_SUCCESS) return true;
+
+	memmap_region_t usable;
+	memmap_iter_result_t result;
+	while ((result = memmap_iter_next(&iter, &usable)) == MEM_ITER_SUCCESS) {
+		if (usable.base <= addr && addr < usable.base + usable.size) return false;
+	}
+	return true;
+}

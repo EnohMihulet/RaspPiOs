@@ -3,25 +3,21 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define PAGE_SIZE 4096
+#include "memmap.h"
 
-typedef struct page {
-	size_t size;
-	struct block* next_free;
-	uint32_t magic;
-	unsigned char free;
-} page_t;
+#define PAGE_SIZE	4096
+#define MAX_PHYS_ADDR	0x200000000ULL
+#define MAX_PAGES	(MAX_PHYS_ADDR / PAGE_SIZE)
+#define BITMAP_SIZE	((MAX_PAGES + 7) / 8)
 
-typedef struct {
-	page_t* head;
-	void* arena_start;
-	size_t arena_size;
-	uint32_t magic;
-} page_allocator;
+#define INVALID_PHYS_ADDR UINT64_MAX
+typedef uint64_t phys_addr_t;
 
-void page_allocator_init();
+/* Requires a finalized map of sorted, non-overlapping usable ranges.
+ * The map is read during initialization only and is not retained. */
+int page_allocator_init(memmap_map_t* map);
+phys_addr_t page_alloc(void);
+int page_free(phys_addr_t page);
 
-void reserve_region(uint64_t start, uint64_t size);
-
-void* page_alloc(void);
-void page_free(void* page);
+uint64_t page_free_count(void);
+uint64_t page_total_count(void);

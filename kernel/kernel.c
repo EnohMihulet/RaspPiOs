@@ -1,5 +1,6 @@
 #include <stdint.h>
 
+#include "page_allocator.h"
 #include "usart.h"
 #include "gic.h"
 #include "timer.h"
@@ -8,6 +9,9 @@
 #include "memmap.h"
 #include "scheduler.h"
 #include "alloc.h"
+
+extern char __kernel_start[];
+extern char __kernel_end[];
 
 static inline uint64_t read_current_el(void) {
 	uint64_t value;
@@ -128,10 +132,14 @@ int kernel_main(uint64_t dtb_address) {
 	kprintf("alloc_init() successful.\r\n");
 
 	memmap_map_t memmap;
-	if (memmap_init(&memmap, (void*)dtb_address) != 0) panic("memmap_init() failed.\r\n");
+	if (memmap_init(&memmap, (const void*)(uintptr_t)dtb_address, dtb_address) != 0) panic("memmap_init() failed.\r\n");
 	if (memmap_add_ram(&memmap) != 0) panic("memmap_add_ram() failed.\r\n");
-	if (memmap_reserve(&memmap) != 0) panic("memmap_reserve() failed.\r\n");
+	if (memmap_reserve(&memmap, (uintptr_t)__kernel_start, (uintptr_t)__kernel_end) != 0) panic("memmap_reserve() failed.\r\n");
 	if (memmap_finalize(&memmap) != 0) panic("memmap_finalize() failed.\r\n");
+	kprintf("memmap successfully created and finalized.\r\n");
+
+	if (page_allocator_init(&memmap) != 0) panic("page_allocator_init() failed.\r\n");
+	kprintf("page_allocator_init() successful.\r\n");
 
 	threads_init();
 	kprintf("threads_init() successful.\r\n");

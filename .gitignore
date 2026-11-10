@@ -9,6 +9,7 @@ compile_commands.json
 .cache
 
 copy_img_to_sdcard.sh
+target_test_to_sdcard.sh
 screen.sh
 
 bcm2712-rpi-b.dtb

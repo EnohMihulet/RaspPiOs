@@ -35,5 +35,8 @@ exception_frame_t* irq_handler(exception_frame_t* frame);
 void enable_irqs(void);
 void disable_irqs(void);
 
+uint64_t irq_save(void);
+void irq_restore(uint64_t daif);
+
 _Noreturn void panic(const char* message);
 

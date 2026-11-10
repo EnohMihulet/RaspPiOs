@@ -1,5 +1,6 @@
 #include "align.h"
 #include "et.h"
+#include "handle_exceptions.h"
 #include "page_allocator.h"
 
 #define FREE_LIST_IMPLEMENTATION
@@ -11,11 +12,24 @@ freelist_allocator _allocator;
 _Alignas(16) uint8_t _allocator_memory[ALLOCATOR_ARENA_SIZE];
 
 static bool allocator_ready;
+static uint64_t simulated_daif;
+#define IRQ_MASK (UINT64_C(1) << 7)
+
+uint64_t irq_save(void) {
+	uint64_t previous = simulated_daif;
+	simulated_daif |= IRQ_MASK;
+	return previous;
+}
+
+void irq_restore(uint64_t flags) {
+	simulated_daif = flags;
+}
 static memmap_map_t map;
 static uint64_t kernel_start = 0x0;
 static uint64_t kernel_end = 0x24000;
 
 void setup(void) {
+	simulated_daif = 0;
 	map = (memmap_map_t){0};
 	allocator_ready = freelist_init(&_allocator, _allocator_memory, sizeof(_allocator_memory)) == FREELIST_OK;
 }
@@ -53,6 +67,45 @@ static bool init_page_alloc() {
 void teardown(){}
 
 TEST_GROUP("test page allocator") {
+	TEST("allocator preserves IRQ state on success and failure") {
+		const test_range_t ram[] = {{0x1000, PAGE_SIZE}};
+		const test_dtb_spec_t spec = {.ram = ram, .ram_count = 1};
+		VERIFY(init_dtb(&spec));
+		VERIFY(memmap_init(&map, buffer, 0) == 0);
+		VERIFY(memmap_add_ram(&map) == 0);
+		VERIFY(memmap_finalize(&map) == 0);
+		for (size_t masked = 0; masked < 2; masked++) {
+			/* Preserve other DAIF bits as well as the IRQ mask. */
+			uint64_t initial = (UINT64_C(1) << 6) | (masked ? IRQ_MASK : 0);
+			simulated_daif = initial;
+			VERIFY(page_allocator_init(NULL) == 1);
+			VERIFY(simulated_daif == initial);
+			VERIFY(page_allocator_init(&map) == 0);
+			VERIFY(simulated_daif == initial);
+			VERIFY(page_free_count() == 1);
+			VERIFY(simulated_daif == initial);
+			VERIFY(page_total_count() == 1);
+			VERIFY(simulated_daif == initial);
+			VERIFY(page_alloc() == 0x1000);
+			VERIFY(simulated_daif == initial);
+			VERIFY(page_alloc() == INVALID_PHYS_ADDR);
+			VERIFY(simulated_daif == initial);
+			VERIFY(page_free(0x1001) == 1);
+			VERIFY(simulated_daif == initial);
+			VERIFY(page_free(MAX_PHYS_ADDR) == 1);
+			VERIFY(simulated_daif == initial);
+			VERIFY(page_free(0x2000) == 1);
+			VERIFY(simulated_daif == initial);
+			VERIFY(page_free(0x1000) == 0);
+			VERIFY(simulated_daif == initial);
+			VERIFY(page_free(0x1000) == 1);
+			VERIFY(simulated_daif == initial);
+			memmap_map_t empty = {0};
+			VERIFY(page_allocator_init(&empty) == 1);
+			VERIFY(simulated_daif == initial);
+		}
+	}
+
 	TEST("physical page zero is allocatable and can be freed") {
 		const test_range_t ram[] = {{0, PAGE_SIZE}};
 		const test_dtb_spec_t spec = {.ram = ram, .ram_count = 1};

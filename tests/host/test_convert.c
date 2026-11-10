@@ -1,6 +1,6 @@
 #include "et.h"
 #include <string.h>
-#include "../../lib/convert.h"
+#include "convert.h"
 
 void setup(void) {}
 void teardown(void) {}

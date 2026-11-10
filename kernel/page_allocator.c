@@ -1,5 +1,6 @@
 #include <stdbool.h>
 
+#include "handle_exceptions.h"
 #include "align.h"
 #include "memmap.h"
 #include "string.h"
@@ -88,7 +89,9 @@ static uint64_t page_next_free_pfn(uint64_t pfn) {
 }
 
 int page_allocator_init(memmap_map_t* map) {
-	if (map == NULL) return 1;
+	uint64_t flags = irq_save();
+	int status = 1;
+	if (map == NULL) goto done;
 
 	next_free_pfn = MAX_PAGES;
 	page_mark_all_allocated();
@@ -97,7 +100,7 @@ int page_allocator_init(memmap_map_t* map) {
 	total_page_count = 0;
 
 	memmap_iter_t iter;
-	if (memmap_iter_init(map, &iter) != MEM_ITER_SUCCESS) return 1;
+	if (memmap_iter_init(map, &iter) != MEM_ITER_SUCCESS) goto done;
 
 	memmap_region_t usable;
 	memmap_iter_result_t result;
@@ -118,7 +121,7 @@ int page_allocator_init(memmap_map_t* map) {
 		page_mark_all_reserved();
 		free_page_count = 0;
 		total_page_count = 0;
-		return 1;
+		goto done;
 	}
 
 	next_free_pfn = 0;
@@ -128,57 +131,82 @@ int page_allocator_init(memmap_map_t* map) {
 			page_mark_all_reserved();
 			free_page_count = 0;
 			total_page_count = 0;
-			return 1;
+			goto done;
 		}
 	}
 
-	return 0;
+	status = 0;
+done:
+	irq_restore(flags);
+	return status;
 }
 
 phys_addr_t page_alloc(void) {
-	if (next_free_pfn == MAX_PAGES) return INVALID_PHYS_ADDR;
+	uint64_t flags = irq_save();
+	phys_addr_t addr = INVALID_PHYS_ADDR;
+
+	if (next_free_pfn == MAX_PAGES) goto done;
 
 	while (page_is_allocated(next_free_pfn) || page_is_reserved(next_free_pfn)) {
 		next_free_pfn = page_next_free_pfn(next_free_pfn);
-		if (next_free_pfn == MAX_PAGES) return INVALID_PHYS_ADDR;
+		if (next_free_pfn == MAX_PAGES) goto done;
 	}
 
 	uint64_t pfn = next_free_pfn;
 	page_mark_allocated(pfn);
 	next_free_pfn = page_next_free_pfn(next_free_pfn);
 	free_page_count -= 1;
-	return pfn << 12;
+	addr = pfn << 12;
+
+done:
+	irq_restore(flags);
+
+	return addr;
 }
 
 int page_free(phys_addr_t addr) {
+	uint64_t flags = irq_save();
+	int status = 1;
+
 	if (addr & (PAGE_SIZE - 1)) {
-		return 1;
+		goto done;
 	}
 	
 	uint64_t pfn = addr >> 12;
 	
 	if (pfn >= MAX_PAGES) {
-		return 1;
+		goto done;
 	}
 
 	if (page_is_reserved(pfn)) {
-		return 1;
+		goto done;
 	}
 	
 	if (!page_is_allocated(pfn)) {
-		return 1;
+		goto done;
 	}
 	
 	page_mark_free(pfn);
 	if (pfn < next_free_pfn) next_free_pfn = pfn;
 	free_page_count += 1;
-	return 0;
+	status = 0;
+
+done:
+	irq_restore(flags);
+
+	return status;
 }
 
 uint64_t page_free_count(void) {
-	return free_page_count;
+	uint64_t flags = irq_save();
+	uint64_t count = free_page_count;
+	irq_restore(flags);
+	return count;
 }
 
 uint64_t page_total_count(void) {
-	return total_page_count;
+	uint64_t flags = irq_save();
+	uint64_t count = total_page_count;
+	irq_restore(flags);
+	return count;
 }

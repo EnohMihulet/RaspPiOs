@@ -83,3 +83,22 @@ void enable_irqs(void) {
 void disable_irqs(void) {
 	__asm__ volatile("msr daifset, #2" ::: "memory");
 }
+
+uint64_t irq_save(void) {
+	uint64_t daif;
+	__asm__ volatile(
+		"mrs %0, daif\n"
+		"msr daifset, #2"
+		: "=r"(daif) 
+		:: "memory"
+	);
+	return daif;
+}
+
+void irq_restore(uint64_t daif) {
+	__asm__ volatile(
+		"msr daif, %0"
+		:: "r"(daif) 
+		: "memory"
+	);
+}
